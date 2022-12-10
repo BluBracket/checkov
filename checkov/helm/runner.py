@@ -103,7 +103,7 @@ class Runner(BaseRunner):
             logging.info(f"Error running necessary tools to process {self.check_type} checks.")
             return self.check_type
 
-    def _parse_output(self, target_dir: str, output: bytes) -> None:
+    def _parse_output(self, target_dir: str, output: bytes, chart_name: str) -> None:
         output = str(output, 'utf-8')
         reader = io.StringIO(output)
         cur_source_file = None
@@ -123,6 +123,12 @@ class Runner(BaseRunner):
                 if not s.startswith('# Source: '):
                     raise Exception(f'Line {line_num}: Expected line to start with # Source: {s}')
                 source = s[10:]
+                
+                if source.startswith(chart_name):
+                    # Remove chart name prefix from the source
+                    # ingress-nginx/templates/controller-deployment.yaml => templates/controller-deployment.yaml
+                    source = source[len(chart_name)+1:]
+
                 if source != cur_source_file:
                     if cur_writer:
                         cur_writer.close()
@@ -155,10 +161,10 @@ class Runner(BaseRunner):
         target_dir.replace("//", "/")
         chart_name = chart_meta.get('name', chart_meta.get('Name'))
         chart_version = chart_meta.get('version', chart_meta.get('Version'))
+
         if target_dir.endswith('/'):
             target_dir = target_dir[:-1]
-        if target_dir.endswith(chart_name):
-            target_dir = target_dir[:-len(chart_name)]
+
         logging.info(
             f"Processing chart found at: {chart_dir}, name: {chart_name}, version: {chart_version}")
         # dependency list is nicer to parse than dependency update.
@@ -194,7 +200,7 @@ class Runner(BaseRunner):
             )
 
         try:
-            self._parse_output(target_dir, o)
+            self._parse_output(target_dir, o, chart_name)
         except Exception:
             logging.info(
                 f"Error parsing output {chart_name} at dir: {chart_dir}. Working dir: {target_dir}.",
